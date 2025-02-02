@@ -1,74 +1,70 @@
+```{r}
 # Load necessary libraries
-library(DESeq2)       # For differential expression analysis
-library(dplyr)        # For data manipulation
-library(ggplot2)      # For data visualization (PCA and Volcano plots)
-library(BiocParallel) # For parallel processing
-library(ggrepel)      # For enhanced labeling of volcano plot
+library(DESeq2)
+library(dplyr)
+library(ggplot2)
+library(BiocParallel)
+library(ggrepel)
 
-# Define the parent directory containing subfolders with data
-parent_dir <- "G:/Other computers/My Laptop/Ayassbioscience-workplace/new-samples/HSIL-NEW-SAMPLES/processed/"
+# Define the parent directory containing subfolders
+parent_dir <- "enter the location of your main folder where each sub-folders is located"
 
-# Retrieve a list of all subfolders in the parent directory
+# Get a list of all subfolders
 subfolders <- list.dirs(parent_dir, recursive = FALSE)
 
-# Function to process each subfolder and perform differential expression analysis
+# Define a function to process each subfolder
 process_subfolder <- function(subfolder) {
-  # Define path for the metadata file within the subfolder
+  # Define the metadata file path
   meta_file <- file.path(subfolder, "metadata.csv")
-  
-  # Locate the count data file (excluding the metadata.csv file)
+  # Find the count file (any CSV file other than metadata.csv)
   count_files <- list.files(subfolder, pattern = "\\.csv$", full.names = TRUE)
-  count_file <- setdiff(count_files, meta_file) # Exclude metadata.csv from count files
-  
-  # Check if both the metadata file and exactly one count file are found
+  count_file <- setdiff(count_files, meta_file)
+  # Check if both files exist
   if (file.exists(meta_file) && length(count_file) == 1) {
     try({
-      # Load count data and metadata files
-      mycounts <- read.csv(count_file) # Loading count data
-      metadata <- read.csv(meta_file)  # Loading metadata
-      
-      # Convert to data frames for compatibility
+      # Load count and metadata files
+      mycounts <- read.csv(count_file)  # Using read.csv as it works better for CSV files
+      metadata <- read.csv(meta_file)
+      # Convert to data frames (optional for compatibility)
       mycounts <- as.data.frame(mycounts)
       metadata <- as.data.frame(metadata)
       
-      # Check if metadata contains the required 'condition' column for experimental conditions
+      # Ensure metadata has the required "condition" column
       if (!"condition" %in% colnames(metadata)) {
         stop("Metadata file must contain a 'condition' column.")
       }
       
-      # Ensure the metadata file contains both 'HPV' and 'Normal' conditions
+      # Ensure 'hpv' and 'Normal' exist in the meta file as well
       if (!all(c("hpv", "Normal") %in% unique(metadata$condition))) {
         stop("Conditions 'HPV' and 'Normal' not found in metadata.")
       }
       
-      # Create DESeq2 dataset for differential expression analysis
+      # Create DESeq2 dataset
       dds <- DESeqDataSetFromMatrix(countData = mycounts, 
                                     colData = metadata, 
                                     design = ~condition, 
                                     tidy = TRUE)
       
-      # Normalize the data and perform DESeq analysis
+      # Normalize and run DESeq
       dds <- estimateSizeFactors(dds)
       dds <- DESeq(dds)
       
-      # Extract results for the contrast of 'HPV' vs 'Normal'
+      # Extract results for the contrast HPV vs Normal
       res <- results(dds, contrast = c("condition", "hpv", "Normal"), tidy = TRUE)
       
-      # Perform variance stabilizing transformation (VST) for PCA
+      # PCA with and without labels
       vsdata <- vst(dds, blind = FALSE)
-      
-      # Generate PCA data for visualizing variance between samples
       pca_data <- plotPCA(vsdata, intgroup = c("condition"), returnData = TRUE)
       
-      # Compute variance explained by the first two principal components
-      pca_result <- prcomp(t(assay(vsdata))) 
-      variance <- pca_result$sdev^2 / sum(pca_result$sdev^2) * 100  # Variance explained by each PC
+      # PCA result (variance)
+      pca_result <- prcomp(t(assay(vsdata)))
+      variance <- pca_result$sdev^2 / sum(pca_result$sdev^2) * 100  # Percentage variance explained by each PC
       
-      # Extract percentage variance for PC1 and PC2
+      # Display the variance explained by PC1 and PC2
       pc1_variance <- round(variance[1], 2)
       pc2_variance <- round(variance[2], 2)
       
-      # Create PCA plot with variance labels
+      # PCA plot with variance labels
       pca_plot <- ggplot(pca_data, aes(x = PC1, y = PC2, color = condition)) +
         geom_point(size = 3) +
         ggtitle(paste("PCA: PC1 explains", pc1_variance, "% and PC2 explains", pc2_variance, "% of the variance")) +
@@ -77,15 +73,15 @@ process_subfolder <- function(subfolder) {
         theme_minimal() +
         theme(legend.position = "none")
       
-      # Save PCA plot as PNG
+      # Save PCA plot
       ggsave(file.path(subfolder, "PCA_plot_with_variance.png"), plot = pca_plot, dpi = 300, width = 10, height = 8)
       
-      # Save PCA results (PC1 and PC2 coordinates)
+      # Save PCA results
       pca_results_file <- file.path(subfolder, "PCA_results.csv")
       pca_results <- data.frame(PC1 = pca_data$PC1, PC2 = pca_data$PC2, condition = pca_data$condition)
       write.csv(pca_results, pca_results_file, row.names = FALSE)
       
-      # Generate volcano plot to visualize DEG significance
+      # Volcano plot
       volcano_plot <- res %>%
         filter(!is.na(padj)) %>%
         ggplot(aes(x = log2FoldChange, y = -log10(padj),
@@ -96,10 +92,10 @@ process_subfolder <- function(subfolder) {
         geom_vline(xintercept = 1) +
         geom_vline(xintercept = -1)
       
-      # Save volcano plot as PNG
+      # Save volcano plot
       ggsave(file.path(subfolder, "volcano_plot.png"), plot = volcano_plot, dpi = 300, width = 10, height = 8)
       
-      # Generate enhanced volcano plot with labels for significant genes
+      # Enhanced Volcano Plot with labels
       enhanced_volcano_plot <- res %>%
         filter(!is.na(padj)) %>%
         ggplot(aes(x = log2FoldChange, y = -log10(padj),
@@ -120,7 +116,7 @@ process_subfolder <- function(subfolder) {
                         box.padding = unit(0.35, "lines"),
                         point.padding = unit(0.5, "lines"))
       
-      # Save enhanced volcano plot as PNG
+      # Save enhanced volcano plot
       ggsave(file.path(subfolder, "enhanced_volcano_plot.png"), plot = enhanced_volcano_plot, dpi = 300, width = 10, height = 8)
       
       # Filter DEGs with padj < 0.05 and select key columns
@@ -129,26 +125,29 @@ process_subfolder <- function(subfolder) {
         arrange(padj) %>%
         select(row, log2FoldChange, pvalue, padj)
       
-      # Save DEGs to a CSV file
+      # Define output file path for DEGs
       output_file <- file.path(subfolder, "DEGs_File.csv")
+      # Save DEGs to the subfolder
       write.csv(degs, output_file)
       
-      # Print summary of the processing for the current subfolder
+      # Print summary
       cat("Processed folder:", subfolder, "\n")
       cat("Count file used:", basename(count_file), "\n")
       cat("Total DEGs:", nrow(degs), "\n\n")
-    }, silent = TRUE)  # Handle any errors silently
+    }, silent = TRUE)
   } else {
-    # Skip subfolder if count file is missing or multiple count files exist
     cat("Skipped folder (missing or multiple count files):", subfolder, "\n")
   }
 }
 
-# Set up parallel processing to speed up execution
-register(MulticoreParam(workers = 4))  # Use 4 CPU cores for parallel processing
+# Set up parallel processing
+register(MulticoreParam(workers = 4))  # Use 4 CPU cores
 
-# Apply the function to process all subfolders in parallel
+# Process all subfolders in parallel
 bplapply(subfolders, process_subfolder)
 
-# Clean up parallel processing after execution
+# Clean up
 register(SerialParam())  # Reset to single core after processing
+
+```
+
