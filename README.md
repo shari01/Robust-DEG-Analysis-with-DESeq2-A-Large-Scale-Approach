@@ -62,10 +62,3 @@ This R script automates differential expression analysis for up to 100 samples i
     <li><strong>ggrepel:</strong> To add labels to Volcano plots, improving readability.</li>
   </ul>
 
-  <h2>📈 Example Output:</h2>
-  <img src="PCA_plot_with_variance.png" alt="PCA Plot Example" width="500">
-  <img src="volcano_plot.png" alt="Volcano Plot Example" width="500">
-  <img src="enhanced_volcano_plot.png" alt="Enhanced Volcano Plot Example" width="500">
-
-</body>
-</html>
